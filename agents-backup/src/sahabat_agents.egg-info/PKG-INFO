@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: sahabat-agents
+Version: 0.1.0
+Summary: The agent tier for the Sahabat AI platform.
+Requires-Python: >=3.11
+Requires-Dist: google-adk
+Requires-Dist: uvicorn
+Requires-Dist: python-dotenv
+Requires-Dist: httpx

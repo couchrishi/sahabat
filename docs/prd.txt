@@ -1,0 +1,127 @@
+Product Requirements Document: Sahabat AI Aggregator Platform v1.1
+Version: 1.1
+
+Status: Final
+
+Owner: AI Platform & Products
+
+Date: 24 September 2025
+
+1. Introduction & Vision
+This document outlines the requirements for building the Sahabat AI Aggregator Platform v1.1. The primary goal is to create a multi-modal, multi-model AI platform that serves as a central gateway for various generative AI tasks.
+
+The platform's vision is 
+
+"AI for ALL", aiming to provide accessible and powerful AI tools to Indonesian consumers and B2B enterprises, with a focus on cost-efficiency, scalability, and a superior user experience. This version focuses on the core aggregator functionality.
+
+2. Core Features
+F1: Multi-Modal Interactions: Users can submit queries via text and can also upload images, audio, and documents for analysis by the platform.
+
+
+F2: Multi-Model Generation: The platform will generate responses in multiple formats, including Text, Images, and Video, by routing requests to the most appropriate AI model.
+
+
+F3: Conversational Context: The system must maintain session state, remember conversation history, and use it as context for follow-up queries. History will be stored for up to 90 days for paid users and 15 days for free users.
+
+
+
+F4: Tiered User Access: The platform will support three distinct user tiers with different quota limits as defined in the Business Requirement Document (BRD): Free, Paid, and IOH Bundle.
+
+
+F5: User Profile & Quota Visibility: Users must be able to view their current subscription tier and their quota usage for different models and task complexities from a profile screen.
+
+3. System Architecture & Flow
+The platform will be built on a Hybrid Three-Tier Architecture to ensure a clean separation between business logic, AI orchestration, and model inferencing.
+
+Architectural Components
+Tier 1: Pre-processing API Gateway (The "Front Door")
+
+Description: A high-performance, non-AI service that is the single entry point for all user traffic.
+
+Tech Stack: Python/FastAPI.
+
+Responsibilities:
+
+Handles user authentication (Guest, Agnostic, IOH users).
+
+Connects to the PostgreSQL database to perform all quota checks against the user's profile and the rules defined in the BRD.
+
+Rejects requests that are out-of-quota immediately with a 429 Too Many Requests error.
+
+Creates and passes a user_context object (e.g., {"tier": "Paid"}) to the ADK agent system.
+
+Tier 2: Google ADK Agent System (The "Brain")
+
+Description: The AI orchestration layer where all intelligent reasoning and task delegation occurs.
+
+Tech Stack: Google ADK (Python).
+
+Components:
+
+OrchestratorAgent: The single entry point from the Gateway. This LlmAgent makes one LLM call to classify the user's intent, determine the target_agent, and extract business context (e.g., complexity).
+
+SpecialistAgents: A consolidated set of agents responsible for specific tasks.
+
+TextGenerationAgent
+
+ImageGenerationAgent
+
+VideoGenerationAgent
+
+MultiModalQueryAgent (Handles requests with user-uploaded files).
+
+SessionService: Manages all conversation history using ADK's built-in DatabaseSessionService, backed by the PostgreSQL database.
+
+Tier 3: LiteLLM Proxy (The "Inferencing Layer")
+
+Description: A centralized server that manages all communication with the underlying AI models.
+
+Tech Stack: LiteLLM Proxy (running in Docker).
+
+Responsibilities:
+
+Securely stores all third-party API keys.
+
+Receives requests from the ADK Specialist Agents.
+
+Reads the metadata (tags) in the request and uses routing rules in its config.yaml to select the final model.
+
+Handles caching, fallbacks, and retries.
+
+User Flow Example (Text-to-Image)
+A "Paid" user sends a prompt: "Create a photorealistic image of a Komodo dragon on a beach."
+
+The API Gateway validates the user and confirms they have quota for "Complex" image generation. It passes the prompt and user_context to the ADK system.
+
+The OrchestratorAgent receives the request. Its LLM determines the target_agent is ImageGenerationAgent and the complexity is Complex. It saves this to the Session.State.
+
+The Orchestrator invokes the ImageGenerationAgent.
+
+The ImageGenerationAgent reads the context, prepares the final prompt, and sends a request to the LiteLLM Proxy, including metadata={"complexity": "Complex", "user_tier": "Paid"}.
+
+The LiteLLM Proxy reads the metadata, and its rules dictate that this request should be routed to Imagen. The proxy calls the Imagen API and streams the response back through the stack to the user.
+
+4. Functional Requirements
+ID	Feature	Description
+F-01	User Quota Enforcement	The API Gateway MUST check a user's quota against the PostgreSQL database before every AI request. If quota is exceeded, the API MUST return a 429 error and the request MUST NOT proceed to the ADK system.
+F-02	Intent & Complexity Analysis	The OrchestratorAgent MUST analyze the user's prompt to determine the correct SpecialistAgent to delegate to and assess the task complexity ('Low', 'Medium', 'Complex'). This MUST be done in a single LLM call.
+F-03	Metadata-Based Routing	Specialist Agents MUST pass business context (complexity, user_tier, etc.) as metadata to the LiteLLM Proxy. The LiteLLM Proxy's configuration MUST contain the routing rules from the BRD to select the final model.
+F-04	Session State Persistence	The ADK DatabaseSessionService MUST correctly save and retrieve conversation history to/from the PostgreSQL database, keyed by a session_id, to maintain context.
+F-05	Multi-modal Input Triage	The API Gateway MUST identify requests containing file uploads (attachments). These requests MUST be classified as "Complex" for quota-checking purposes and routed to the MultiModalQueryAgent.
+F-06	Centralized API Key Management	All external API keys (for Gemini, Sahabat, etc.) MUST be stored and managed within the LiteLLM Proxy. They MUST NOT be present in the ADK agent code.
+
+Export to Sheets
+
+5. Non-Functional Requirements
+Performance: For P95 of users, simple text-generation queries ("Low" complexity) should have a time-to-first-token of < 1.5 seconds.
+
+Scalability: The system must be architected to handle 10,000 concurrent users. All components (Gateway, ADK, Proxy) must be containerized and deployable via Kubernetes.
+
+Reliability: The LiteLLM Proxy should be configured with fallbacks for critical models to ensure high availability (e.g., if a primary image model is down, fall back to a secondary one).
+
+6. Out of Scope (for v1.1)
+Research Agent: The "Perplexity-style" web search and research agent is explicitly out of scope for this version.
+
+Agent Factory: The capability for third parties to create and deploy their own agents on the platform is a future release.
+
+eCommerce & Payments: Direct integration with payment gateways within the chat flow is out of scope for this version.

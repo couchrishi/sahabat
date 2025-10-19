@@ -1,0 +1,16 @@
+[project]
+name = "sahabat-agents"
+version = "0.1.0"
+description = "The agent tier for the Sahabat AI platform."
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk",
+    "uvicorn",
+    "python-dotenv",
+    "httpx",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
